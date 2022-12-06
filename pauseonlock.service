@@ -1,0 +1,8 @@
+[Unit]
+Description=pause media player when lockscreen
+
+[Service]
+ExecStart=/usr/local/bin/pause-on-lock -c
+
+[Install]
+Alias=pauseonlock.service
