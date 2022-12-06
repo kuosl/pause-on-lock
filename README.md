@@ -32,6 +32,14 @@ and run
 
 ```
 sudo install pause-on-lock /usr/local/bin/
+
+# make user service
+cp pauseonlock.service $HOME/.config/systemd/user/pauseonlock.service
+
+    413  systemctl --user enable pauseonlock.service 
+    540* systemctl --user restart pauseonlock.service                                                                                                         
+    541* systemctl --user status pauseonlock.service
+    
 ```
 
 If you don't have sudo rights or don't want a system-wide installation, change
@@ -40,39 +48,3 @@ folder is in your `$PATH`).
 
 ## Usage
 
-### Rhythmbox and Spotify
-
-By default pause-on-lock supports
-[Rhythmbox](https://wiki.gnome.org/Apps/Rhythmbox) and
-[Spotify](https://www.spotify.com/us/download/linux/). If you use no other
-players, no further configuration is needed, you can simply run
-`pause-on-lock`.
-
-### User defined player
-
-With the `--player` or `-p` flag you can provide the name of one additional
-player that pause-on-lock will then handle. The player needs to provide a
-[MPRIS](http://specifications.freedesktop.org/mpris-spec/latest/) D-Bus
-interface (which is the case for most common media players) and the name you
-provide needs to match the name used for the D-Bus interface. For example
-[vlc](https://videolan.org) provides a D-Bus interface at
-`org.mpris.MediaPlayer2.vlc` so all you need to do is call `pause-on-lock -p
-vlc` and pause-on-lock will pause any running vlc instance when you lock your
-screen.
-
-**tl;dr** `pause-on-lock --player NAME` should work in most cases.
-
-### Playerctl
-
-If you want support for many different players and you have
-[playerctl](https://github.com/acrisci/playerctl) installed, you can use the
-`--playerctl` or `-c` flag to enable playerctl support in pause-on-lock. Then
-all players that playerctl can handle are supported, without the need for
-further configuration.
-
-### Autostart
-
-I strongly recommend to add the pause-on-lock executable to [Startup
-Applications](https://help.ubuntu.com/stable/ubuntu-help/startup-applications.html)
-(or the equivalent for your desktop environment), so it is run every time you
-log in.
