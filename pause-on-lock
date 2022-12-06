@@ -29,12 +29,6 @@ __is_playing() {
     grep 'Playing' &> /dev/null
 }
 
-__pause_player() {
-  dbus-send --print-reply --dest="$INTERFACE.$1" "$OBJPATH" \
-    "$INTERFACE.Player.Pause" &> /dev/null
-    PAUSED_PLAYER="$1"
-}
-
 __resume_player() {
   dbus-send --print-reply --dest="$INTERFACE.$1" "$OBJPATH" \
     "$INTERFACE.Player.Play" &> /dev/null
@@ -52,11 +46,8 @@ INTERFACE="org.mpris.MediaPlayer2"
 OBJPATH="/org/mpris/MediaPlayer2"
 GET_PROPERTIES="org.freedesktop.DBus.Properties.Get"
 
-# variable to check, whether we paused on lock
-PAUSED_PLAYER="none"
-
 # variable indicating whether to use playerctl
-PLAYERCTL=false
+PLAYERCTL=true
 
 # parse command line options
 while (( "$#" )); do
@@ -100,9 +91,6 @@ while (( "$#" )); do
   esac
 done
 
-# Players we want to control
-players=("$USER_PLAYER" rhythmbox spotify)
-
 if [ "${desktops[$XDG_CURRENT_DESKTOP]}" == "" ]; then
   echo "Error: Unsupported desktop. Supported desktops are Unity, GNOME, Cinnamon, Mate and KDE."
   exit 1
@@ -119,40 +107,61 @@ fi
 
 dbus-monitor --session "type='signal',$DBUS_LOCK" | \
 (
+  # every signal will send twice, which will make log player unexpected, use $second_run to tell them apart
+  second_run=false
   while true; do
     read -r X
     # pause on lock
-    if echo "$X" | grep "$LOCK_SIGNAL" &> /dev/null; then
-      # with playerctl
-      if $PLAYERCTL; then
-        # get list of running players
-        read -r -a players <<< "$(playerctl --list-all)"
-        # check whether a player is playing
-        for player in "${players[@]}"
-        do
-          if [ "$(playerctl --player="$player" status)" = "Playing" ] ; then
-            # and pause it
-            playerctl --player="$player" pause
-            PAUSED_PLAYER=$player
-          fi
-        done
-      # without playerctl
+
+    # save playing player list to tmp file, for the afterwards-resume
+    playing_players="/tmp/playerctl-playing-players"
+
+    ###########  LOCK ###############
+    if echo "$X" | grep -w "$LOCK_SIGNAL" &> /dev/null; then
+      if ! $second_run; then
+        second_run=true
+        continue
       else
-        for player in "${players[@]}"; do
-          if __is_playing "$player"; then
-            __pause_player "$player"
-          fi
+        second_run=false
+      fi
+
+      if [ -e $playing_players ]; then
+        rm -f $playing_players
+      fi
+
+      # get list of running players
+      # check whether a player is playing
+      for player in $(playerctl --list-all)
+      do
+        if [ "$(playerctl -p $player status)" = "Playing" ] ; then
+          # and pause it
+          playerctl -p "$player" pause
+          echo "$player" >> $playing_players
+        fi
+      done
+    fi
+
+    ###########  UNLOCK ###############
+    if echo "$X" | grep -w "$UNLOCK_SIGNAL" &> /dev/null; then
+      if ! $second_run; then
+        second_run=true
+        continue
+      else
+        second_run=false
+      fi
+      if [ -e $playing_players ]; then
+        for player in $(cat $playing_players); do
+          __resume_player "$player"
+        done
+      else
+        players="$(playerctl --list-all)"
+        # check whether a player is playing
+        for player in "$players"
+        do
+          __resume_player "$player"
         done
       fi
     fi
-    # resume on unlock
-    if echo "$X" | grep "$UNLOCK_SIGNAL" &> /dev/null; then
-      # did we pause on lock?
-      if [ "$PAUSED_PLAYER" != "none" ] ; then
-        __resume_player "$PAUSED_PLAYER"
-      fi
-      # reset PAUSED_PLAYER variable
-      PAUSED_PLAYER="none"
-    fi
+
   done
 )
